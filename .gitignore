@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data files
+data/raw/*.csv
+data/raw/*.parquet
+data/processed/*.csv
+data/processed/*.parquet
+data/features/*.csv
+data/features/*.parquet
+data/predictions/*.csv
+data/predictions/*.parquet
+
+# Models
+models/saved_models/*.pkl
+models/saved_models/*.joblib
+
+# OS
+.DS_Store
+
+# Environment
+.env

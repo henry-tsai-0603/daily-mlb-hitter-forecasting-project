@@ -1,0 +1,29 @@
+data:
+  start_date: "2023-03-30"
+  end_date: "2025-10-01"
+  raw_data_dir: "data/raw"
+  processed_data_dir: "data/processed"
+  features_dir: "data/features"
+  predictions_dir: "data/predictions"
+
+features:
+  recent_windows: [7, 14]
+  target_window: 7
+  min_pa_recent: 10
+  min_pa_season: 50
+
+model:
+  target: "future_7d_xwoba"
+  train_end: "2023-12-31"
+  val_start: "2024-01-01"
+  val_end: "2024-12-31"
+  test_start: "2025-01-01"
+  random_state: 42
+
+pitch_types:
+  groups:
+    fastball: ["FF", "FA", "SI", "FC"]
+    slider: ["SL", "ST"]
+    curveball: ["CU", "KC", "SV"]
+    changeup: ["CH", "FS", "FO"]
+    other: ["KN", "EP", "SC"]
