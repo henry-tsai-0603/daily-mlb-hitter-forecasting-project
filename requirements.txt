@@ -12,3 +12,4 @@ pyyaml
 joblib
 streamlit
 scipy
+MLB-StatsAPI
