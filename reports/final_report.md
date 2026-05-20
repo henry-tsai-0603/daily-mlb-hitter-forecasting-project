@@ -447,27 +447,406 @@ However, this should not be interpreted as a standalone causal result. Batter-pi
 
 ## 14. Daily Watchlist Demo
 
-The final demo combines:
+The final component of this project is a daily hitter watchlist. The watchlist is designed to combine model-based short-term forecasting with matchup context so that the output is useful for practical baseball analysis.
+
+The watchlist integrates:
 
 ```text
 Ridge predicted future 7d xwOBA
 season and recent-form baselines
-batter matchup context
+batter pitch-type weakness profile
+opposing pitcher pitch mix
+matchup weakness score
 signal labels
-explanation reasons
+readable output with batter names
 ```
 
-The watchlist classifies hitters into categories such as:
+The goal is not only to produce a numerical prediction, but also to produce an interpretable table that can answer:
+
+> Which hitters should be monitored today, and why?
+
+---
+
+### 14.1 Purpose of the Watchlist
+
+The forecasting model alone answers:
+
+```text
+How well is this hitter expected to perform over the next 7 days?
+```
+
+The matchup module answers:
+
+```text
+Does today's opposing pitcher throw the pitch types that match this hitter's weaknesses?
+```
+
+The daily watchlist combines both perspectives:
+
+```text
+forecasting signal + matchup context = daily hitter decision-support output
+```
+
+This makes the project more similar to a real baseball analytics workflow, where analysts need both model predictions and baseball context.
+
+---
+
+### 14.2 Historical Watchlist Demo
+
+The first version of the watchlist is built as a historical demo using the test period.
+
+For a selected prediction date, the system:
+
+1. Selects hitter predictions from the model output.
+2. Uses Ridge Regression as the primary prediction model.
+3. Merges season and recent-form baseline predictions.
+4. Merges hitter-level matchup context.
+5. Assigns signal labels based on prediction and matchup features.
+6. Produces a readable watchlist table.
+
+This historical version is useful for validating that model prediction and matchup context can be combined into a single interpretable output.
+
+The historical demo is implemented in:
+
+```text
+notebooks/07_daily_watchlist_demo.ipynb
+```
+
+---
+
+### 14.3 Schedule-Aware Watchlist Prototype
+
+The latest version extends the historical demo by integrating MLB schedule and probable pitcher information.
+
+This version is implemented in:
+
+```text
+notebooks/08_daily_schedule_watchlist.ipynb
+```
+
+For a selected target date, the schedule-aware pipeline:
+
+1. Retrieves MLB games and probable starting pitchers.
+2. Converts MLB schedule team names into Statcast team abbreviations.
+3. Identifies hitter candidates based on each hitter's latest team before the target date.
+4. Merges Ridge-based future 7-day xwOBA predictions.
+5. Merges batter pitch-type weakness profiles.
+6. Merges the opposing probable pitcher's pitch mix.
+7. Computes matchup weakness scores.
+8. Assigns daily hitter signal labels.
+9. Adds batter name lookup for readable output.
+10. Saves a daily watchlist and summary report.
+
+This upgrades the project from a historical evaluation workflow into a practical schedule-aware baseball analysis prototype.
+
+---
+
+### 14.4 Schedule Integration
+
+The schedule-aware notebook uses MLB schedule data to identify games and probable starters for a selected date.
+
+The schedule table includes:
+
+```text
+game_id
+game_date
+away_team
+home_team
+away_probable_pitcher
+away_probable_pitcher_id
+home_probable_pitcher
+home_probable_pitcher_id
+```
+
+For each game, the pipeline creates two team-level rows:
+
+```text
+away hitters vs home probable pitcher
+home hitters vs away probable pitcher
+```
+
+This creates a table of team-level daily matchups.
+
+---
+
+### 14.5 Team Mapping
+
+A key engineering challenge is that MLB schedule data and Statcast data use different team formats.
+
+For example:
+
+```text
+MLB schedule: Los Angeles Dodgers
+Statcast: LAD
+```
+
+To solve this, the notebook uses a team mapping dictionary that converts full MLB team names into Statcast team abbreviations.
+
+The pipeline then merges hitter candidates using:
+
+```text
+latest hitter team abbreviation
++
+schedule team abbreviation
+```
+
+This allows the model to identify which hitters are candidates for each scheduled game.
+
+---
+
+### 14.6 Hitter Candidate Pool
+
+The current MVP does not yet use confirmed daily lineups. Instead, hitter candidates are identified based on each hitter's latest known team before the target date.
+
+The process is:
+
+```text
+Use PA-level Statcast data up to target_date
+        ↓
+Determine batting_team from inning_topbot, home_team, and away_team
+        ↓
+Select each hitter's latest team before target_date
+        ↓
+Merge hitters with teams playing on the target date
+```
+
+This produces a practical candidate pool for the schedule-aware watchlist.
+
+Limitation:
+
+```text
+This is not the same as confirmed starting lineups.
+```
+
+Future versions should use official lineup data when available.
+
+---
+
+### 14.7 Probable Pitcher and Pitch Mix Merge
+
+The schedule-aware watchlist uses probable starting pitchers to compute matchup context.
+
+For each hitter candidate, the system identifies the opposing probable pitcher and merges that pitcher's historical pitch mix.
+
+Pitcher pitch mix features include:
+
+```text
+pitcher_usage_fastball
+pitcher_usage_slider
+pitcher_usage_curveball
+pitcher_usage_changeup
+pitcher_usage_cutter
+pitcher_usage_sinker
+```
+
+These features are merged using:
+
+```text
+opposing_pitcher_id
+```
+
+This allows the system to estimate whether the probable pitcher is likely to attack the hitter's pitch-type weaknesses.
+
+---
+
+### 14.8 Matchup Weakness Score
+
+The schedule-aware watchlist computes a matchup weakness score for each hitter-pitcher pairing:
+
+```text
+matchup_weakness_score =
+Σ pitcher_pitch_usage[pitch_type] × batter_weakness[pitch_type]
+```
+
+Interpretation:
+
+```text
+higher score → pitcher throws more of the hitter's weak pitch types
+lower score → matchup is less aligned with hitter weaknesses
+```
+
+The score is converted into a matchup label:
+
+```text
+Favorable
+Neutral
+Unfavorable
+Unknown
+```
+
+The current MVP uses simple rule-based thresholds:
+
+```text
+score >= 0.04  → Unfavorable
+score <= -0.04 → Favorable
+otherwise      → Neutral
+```
+
+If a pitcher does not have enough pitch-mix information, the matchup may be labeled as `Unknown`.
+
+---
+
+### 14.9 Watchlist Signal Logic
+
+The final signal label combines model prediction and matchup context.
+
+The MVP uses a rule-based system. Example categories include:
 
 ```text
 Hot Candidate
 Bounce-back Candidate
 Regression Risk
-Weakness Matchup Alert
 Neutral
 ```
 
-The MVP demo currently uses a historical test period rather than real daily schedule and probable starters. The next version will connect this module to actual MLB daily schedules.
+A hitter can be labeled as a **Hot Candidate** if:
+
+```text
+predicted future 7d xwOBA is high
+and matchup is not strongly unfavorable
+```
+
+A hitter can be labeled as a **Bounce-back Candidate** if:
+
+```text
+model prediction is meaningfully higher than season/recent baseline
+and matchup context is favorable
+```
+
+A hitter can be labeled as a **Regression Risk** if:
+
+```text
+model prediction is below recent-form baseline
+or matchup context is unfavorable
+```
+
+This signal logic is intentionally simple for the MVP. Future versions can replace it with a calibrated ranking score.
+
+---
+
+### 14.10 Final Watchlist Output
+
+The final schedule-aware watchlist includes:
+
+```text
+game_date
+team
+team_abbr
+opponent_team
+opponent_team_abbr
+home_away
+batter_name
+batter
+opposing_probable_pitcher
+opposing_pitcher_id
+pred_ridge
+pred_season_xwOBA
+pred_last_14d_xwOBA
+matchup_weakness_score
+matchup_label
+signal
+```
+
+This output is designed to be readable and interpretable.
+
+It allows the user to quickly see:
+
+```text
+which team the hitter is on
+who the opponent is
+who the opposing probable pitcher is
+what the model predicts
+whether the matchup is favorable or unfavorable
+what signal label the hitter receives
+```
+
+---
+
+### 14.11 Example Interpretation
+
+A row in the watchlist can be interpreted as:
+
+> This hitter is facing a specific probable starter today. The Ridge model predicts a certain future 7-day xwOBA. The matchup score indicates whether the opposing pitcher's pitch mix aligns with the hitter's weaknesses. The final signal label summarizes the model and matchup context.
+
+This makes the watchlist useful as a scouting-style decision-support table rather than just a black-box prediction output.
+
+---
+
+### 14.12 Current Limitations
+
+The schedule-aware watchlist is functional, but still has several limitations:
+
+1. **No confirmed lineups yet**  
+   The current hitter candidate pool is based on latest known team, not confirmed starting lineup.
+
+2. **Probable pitchers may change**  
+   Probable starters can change before game time.
+
+3. **Bullpen pitchers are not modeled**  
+   The current matchup score focuses on the opposing probable starter.
+
+4. **No handedness adjustment yet**  
+   Batter-pitcher handedness splits are not fully incorporated.
+
+5. **No park or weather adjustment yet**  
+   Game environment is not included.
+
+6. **Limited historical data range**  
+   Current model and pitch-mix features are based on the MVP data range.
+
+7. **Simple rule-based signal logic**  
+   Signal labels are currently rule-based and should eventually be calibrated.
+
+---
+
+### 14.13 Future Improvements
+
+Future versions of the watchlist should add:
+
+1. Confirmed lineup integration.
+2. Handedness-specific batter weakness profiles.
+3. Handedness-specific pitcher pitch mix.
+4. Park factor and weather context.
+5. Bullpen matchup estimates.
+6. Player name lookup cache.
+7. Confidence or uncertainty scores.
+8. A Streamlit dashboard for interactive exploration.
+9. A composite ranking score combining forecast, matchup, and playing-time confidence.
+10. Automated daily update workflow.
+
+---
+
+### 14.14 Summary
+
+The daily watchlist demo is the final integration layer of the MVP.
+
+It combines:
+
+```text
+short-term hitter forecasting
++
+batter pitch-type weakness
++
+opposing probable pitcher pitch mix
++
+MLB daily schedule
++
+interpretable signal labels
+```
+
+This turns the project into a practical schedule-aware baseball analytics prototype.
+
+The current version is not yet a production system, but it demonstrates the full end-to-end workflow needed for daily hitter evaluation:
+
+```text
+Statcast data
+→ rolling forecasting model
+→ batter weakness profile
+→ pitcher pitch mix
+→ schedule integration
+→ matchup-adjusted hitter watchlist
+```
+
 
 ---
 
